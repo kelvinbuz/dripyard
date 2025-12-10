@@ -1,111 +1,172 @@
-# DripYard Clothing Line - E-commerce Website
+🧵 DripYard Clothing Line – E-Commerce Platform
 
-A modern PHP-based e-commerce platform for DripYard clothing brand with navy and white themed streetwear.
+A modern PHP-based e-commerce solution for the DripYard streetwear brand with navy & white theme styling.
 
-## Features
+🚀 Features
 
-- **Product Catalog**: Browse and filter products by category
-- **Shopping Cart**: Session-based cart with add/update/remove functionality
-- **User Authentication**: Registration, login, and role-based access (admin/customer)
-- **Admin Panel**: Manage products, categories, users, and orders
-- **DripBox Bundles**: Curated outfit bundles
-- **Payment Integration**: Paystack payment gateway (test mode)
-- **Responsive Design**: Bootstrap 5 with custom navy/white theme
+🛍 Product Catalog with categories & filters
 
-## Setup Instructions
+🛒 Shopping Cart (add/update/remove)
 
-### 1. Database Setup
+👤 User Authentication (Admin/Customer)
 
-Ensure XAMPP MySQL is running, then execute the migrations:
+🛠 Admin Panel to manage:
 
-```bash
-# Navigate to your XAMPP MySQL bin directory
-cd "c:\xampp\mysql\bin"
+Products
 
-# Import the database schema and seed data
-Get-Content "c:\xampp\htdocs\Dripyard\backend\migrations.sql" | .\mysql.exe -u root dripyard_db
-```
+Categories
 
-### 2. Admin Account Setup
+Users
 
-The first user to register automatically becomes an admin. Use these credentials:
+Orders
 
-- **Email**: admin@dripyard.com
-- **Password**: admin123
+📦 DripBox Bundles (curated outfits)
 
-### 3. Paystack Configuration
+💳 Paystack Integration (Test Mode)
 
-Update the Paystack keys in `backend/db.php` for production:
+🔐 Security
 
-```php
-define('PAYSTACK_PUBLIC_KEY', 'your_live_public_key');
-define('PAYSTACK_SECRET_KEY', 'your_live_secret_key');
-```
+Prepared statements (PDO)
 
-### 4. Access the Application
+Password hashing
 
-- **Frontend Store**: `http://localhost/Dripyard/` (Customer interface only)
-- **Admin Panel**: `http://localhost/Dripyard/public/admin/dashboard.php` (Admin interface only)
-- **Admin Login**: Use credentials `admin@dripyard.com` / `admin123`
+Role-based access
 
-## Project Structure
+📱 Responsive UI using Bootstrap 5
 
-```
+🏗️ Tech Stack
+Component	Technology
+Backend	PHP (PDO)
+Database	MySQL
+Frontend	Bootstrap 5
+Payments	Paystack API
+Auth	Sessions
+🛠️ Installation Guide
+
+This project supports Windows (XAMPP/WAMP) and Linux (LAMP).
+
+📁 Project Structure
 Dripyard/
-├── backend/                 # Core PHP backend
-│   ├── auth.php            # Authentication functions
-│   ├── cart-controller.php # Shopping cart API
-│   ├── db.php              # Database connection & helpers
-│   ├── migrations.sql      # Database schema & seed data
-│   └── ...                 # Other controllers
-├── public/                  # Public-facing pages
-│   ├── admin/              # Admin panel pages
-│   ├── partials/           # Shared templates (header, footer, navbar)
-│   ├── index.php           # Homepage
-│   ├── shop.php            # Product catalog
-│   ├── cart.php            # Shopping cart
-│   ├── checkout.php        # Checkout process
-│   └── ...                 # Other public pages
-└── assets/                  # Static assets
-    ├── css/styles.css      # Custom styling
-    └── js/main.js          # Frontend JavaScript
-```
+├── backend/
+├── public/
+├── assets/
+└── ...
 
-## Database Schema
+🪟 Installation for Windows (XAMPP)
+1️⃣ Requirements
 
-- **users**: Customer and admin accounts
-- **categories**: Product categories (T-Shirts, Hoodies, Accessories)
-- **products**: Individual products with pricing and stock
-- **sunnydripboxes**: Curated outfit bundles
-- **orders**: Customer orders
-- **order_items**: Line items for each order
+XAMPP (PHP ≥7.4, MySQL)
 
-## Security Features
+Browser
 
-- Prepared statements for SQL injection prevention
-- Password hashing with PHP's `password_hash()`
-- Session-based authentication
-- Role-based access control (admin vs customer)
-- Input sanitization with `htmlspecialchars()`
+2️⃣ Setup Folder
 
-## Payment Integration
+Copy the project to:
 
-Currently configured with Paystack test keys. For production:
+C:\xampp\htdocs\Dripyard
 
-1. Update Paystack keys in `backend/db.php`
-2. Configure your Paystack account with the correct callback URLs
-3. Test with real Paystack credentials
 
-## Development Notes
+Start Apache and MySQL in XAMPP.
 
-- Uses PDO for database operations
-- Bootstrap 5 for responsive design
-- Session-based shopping cart (no database persistence required)
-- First registered user automatically gets admin role
-- Clean, modern navy and white color scheme
+3️⃣ Create Database
 
-## Troubleshooting
+Open the MySQL bin directory:
 
-- **Database connection errors**: Ensure XAMPP MySQL is running and credentials are correct
-- **Permission errors**: Check that XAMPP has write permissions for the project directory
-- **Paystack errors**: Verify API keys are correctly configured for your environment
+cd "C:\xampp\mysql\bin"
+
+
+Import migration SQL:
+
+mysql -u root -e "CREATE DATABASE dripyard_db;"
+mysql -u root dripyard_db < C:\xampp\htdocs\Dripyard\backend\migrations.sql
+
+4️⃣ Admin Setup
+
+First registered user becomes admin:
+
+Email: admin@dripyard.com
+
+Password: admin123
+
+5️⃣ Configure Paystack Keys
+
+Edit:
+
+Dripyard/backend/db.php
+
+
+Add your keys:
+
+define('PAYSTACK_PUBLIC_KEY', 'your_public_key');
+define('PAYSTACK_SECRET_KEY', 'your_secret_key');
+
+6️⃣ Run the App
+
+Storefront:
+http://localhost/Dripyard/
+
+Admin Panel:
+http://localhost/Dripyard/public/admin/login.php
+
+🐧 Installation for Linux (Ubuntu LAMP)
+1️⃣ Install Dependencies
+sudo apt update
+sudo apt install apache2 mysql-server php php-mysql php-xml php-curl unzip
+
+2️⃣ Move Project to Web Root
+sudo cp -r Dripyard /var/www/html/
+
+3️⃣ Set Folder Permission
+sudo chown -R www-data:www-data /var/www/html/Dripyard
+sudo chmod -R 755 /var/www/html/Dripyard
+
+4️⃣ Create Database & Import SQL
+sudo mysql -e "CREATE DATABASE dripyard_db;"
+sudo mysql dripyard_db < /var/www/html/Dripyard/backend/migrations.sql
+
+5️⃣ Configure Paystack Keys
+
+Edit:
+
+/var/www/html/Dripyard/backend/db.php
+
+6️⃣ Restart Server
+sudo systemctl restart apache2
+
+7️⃣ Access the Website
+
+Frontend:
+http://localhost/Dripyard/
+
+Admin:
+http://localhost/Dripyard/public/admin/login.php
+
+🔐 Security Highlights
+
+Password hashing (password_hash())
+
+Prepared SQL statements (PDO)
+
+Sanitized inputs (htmlspecialchars())
+
+Role-based access (admin/customer)
+
+🧪 Troubleshooting
+Issue	Solution
+MySQL not connecting	Ensure MySQL service is running
+Paystack errors	Confirm API keys and callback URL
+Permission denied (Linux)	Run chmod and chown
+Blank page	Enable PHP errors in config
+🌱 Future Enhancements
+
+Email notifications
+
+Wishlist system
+
+Discount coupons
+
+Mobile app moderation dashboard
+
+🤝 Contributing
+
+Feel free to fork, submit issues, and improve!
