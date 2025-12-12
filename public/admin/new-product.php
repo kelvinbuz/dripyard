@@ -11,12 +11,9 @@ $pdo = getPDO();
 $message = '';
 $error = '';
 
-$stmtCats = $pdo->query('SELECT * FROM categories ORDER BY name ASC');
-$categories = $stmtCats->fetchAll();
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = trim($_POST['name'] ?? '');
-    $categoryId = (int)($_POST['category_id'] ?? 0);
+    $categoryName = trim($_POST['category_name'] ?? '');
     $price = (float)($_POST['price'] ?? 0);
     $description = trim($_POST['description'] ?? '');
     $stock = (int)($_POST['stock'] ?? 0);
@@ -48,8 +45,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     }
-    
-    if (!$error && $name !== '' && $categoryId > 0 && $price > 0) {
+
+    // Basic validation
+    if (!$error && ($name === '' || $categoryName === '' || $price <= 0)) {
+        $error = 'Please fill in all required fields (name, category, price).';
+    }
+
+    // Resolve category: find existing by name (case-sensitive as stored), or create a new one
+    $categoryId = null;
+    if (!$error) {
+        try {
+            $stmtCat = $pdo->prepare('SELECT id FROM categories WHERE name = ? LIMIT 1');
+            $stmtCat->execute([$categoryName]);
+            $existing = $stmtCat->fetch();
+
+            if ($existing) {
+                $categoryId = (int)$existing['id'];
+            } else {
+                $stmtInsertCat = $pdo->prepare('INSERT INTO categories (name, created_at) VALUES (?, NOW())');
+                $stmtInsertCat->execute([$categoryName]);
+                $categoryId = (int)$pdo->lastInsertId();
+            }
+        } catch (Throwable $e) {
+            $error = 'Could not save category: ' . $e->getMessage();
+        }
+    }
+
+    if (!$error && $categoryId && $name !== '' && $price > 0) {
         $stmt = $pdo->prepare('INSERT INTO products (name, category_id, price, description, image, stock, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())');
         $stmt->execute([$name, $categoryId, $price, $description, $image, $stock]);
         header('Location: products.php?success=product_added');
@@ -86,14 +108,10 @@ include __DIR__ . '/../partials/admin_header.php';
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Category <span class="text-danger">*</span></label>
-                        <select name="category_id" class="form-select" required>
-                            <option value="">Select category</option>
-                            <?php foreach ($categories as $cat): ?>
-                                <option value="<?php echo (int)$cat['id']; ?>" <?php echo (($_POST['category_id'] ?? '') == $cat['id']) ? 'selected' : ''; ?>>
-                                    <?php echo htmlspecialchars($cat['name']); ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
+                        <input type="text" name="category_name" class="form-control" 
+                               value="<?php echo htmlspecialchars($_POST['category_name'] ?? ''); ?>" 
+                               placeholder="e.g., T-Shirts, Hoodies, Accessories" required>
+                        <div class="form-text">Type a category name. A new category will be created automatically if it does not exist.</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Price (GH₵) <span class="text-danger">*</span></label>

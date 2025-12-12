@@ -24,11 +24,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_category'])) {
         if ($stmt->fetch()) {
             $error = 'Category already exists!';
         } else {
-            // Simple insert compatible with current schema (no created_at column required)
-            $stmt = $pdo->prepare('INSERT INTO categories (name) VALUES (?)');
-            $stmt->execute([$categoryName]);
-            header('Location: categories.php?success=category_created');
-            exit;
+            try {
+                // Explicit insert including created_at to be compatible with both dumped and migrated schemas
+                $stmt = $pdo->prepare('INSERT INTO categories (name, created_at) VALUES (?, NOW())');
+                $stmt->execute([$categoryName]);
+                header('Location: categories.php?success=category_created');
+                exit;
+            } catch (Throwable $e) {
+                // Surface database errors in the admin UI instead of failing silently
+                $error = 'Database error while creating category: ' . $e->getMessage();
+            }
         }
     }
 }

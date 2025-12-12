@@ -11,28 +11,64 @@ $pdo = getPDO();
 $user = getCurrentUser();
 $cart = getCart();
 $products = [];
+$boxes = [];
 $total = 0.0;
 $discount = 0.0;
 $shipping = 0.0;
 
 if (!empty($cart)) {
-    $ids = array_map('intval', array_column($cart, 'product_id'));
-    $placeholders = implode(',', array_fill(0, count($ids), '?'));
-    $stmt = $pdo->prepare("SELECT id, name, price, image FROM products WHERE id IN ($placeholders)");
-    $stmt->execute($ids);
-    $rows = $stmt->fetchAll();
-    foreach ($rows as $row) {
-        $products[$row['id']] = $row;
+    $productIds = [];
+    $boxIds = [];
+    foreach ($cart as $item) {
+        $type = (string)($item['item_type'] ?? 'product');
+        if ($type === 'box') {
+            $boxIds[] = (int)($item['box_id'] ?? 0);
+        } else {
+            $productIds[] = (int)($item['product_id'] ?? 0);
+        }
+    }
+    $productIds = array_values(array_unique(array_filter($productIds)));
+    $boxIds = array_values(array_unique(array_filter($boxIds)));
+
+    if (!empty($productIds)) {
+        $placeholders = implode(',', array_fill(0, count($productIds), '?'));
+        $stmt = $pdo->prepare("SELECT id, name, price, image FROM products WHERE id IN ($placeholders)");
+        $stmt->execute($productIds);
+        $rows = $stmt->fetchAll();
+        foreach ($rows as $row) {
+            $products[$row['id']] = $row;
+        }
+    }
+
+    if (!empty($boxIds)) {
+        $placeholders = implode(',', array_fill(0, count($boxIds), '?'));
+        $stmt = $pdo->prepare("SELECT id, name, price, image FROM sunnydripboxes WHERE id IN ($placeholders)");
+        $stmt->execute($boxIds);
+        $rows = $stmt->fetchAll();
+        foreach ($rows as $row) {
+            $boxes[$row['id']] = $row;
+        }
     }
 }
 
 // Calculate totals
 $subtotal = 0.0;
 foreach ($cart as $item) {
-    $pid = (int)$item['product_id'];
-    $qty = (int)$item['quantity'];
-    if (isset($products[$pid])) {
-        $subtotal += $products[$pid]['price'] * $qty;
+    $type = (string)($item['item_type'] ?? 'product');
+    $qty = (int)($item['quantity'] ?? 0);
+    if ($qty <= 0) {
+        continue;
+    }
+    if ($type === 'box') {
+        $bid = (int)($item['box_id'] ?? 0);
+        if (isset($boxes[$bid])) {
+            $subtotal += $boxes[$bid]['price'] * $qty;
+        }
+    } else {
+        $pid = (int)($item['product_id'] ?? 0);
+        if (isset($products[$pid])) {
+            $subtotal += $products[$pid]['price'] * $qty;
+        }
     }
 }
 
@@ -83,7 +119,7 @@ include __DIR__ . '/partials/header.php';
 <!-- Checkout Content -->
 <section class="checkout-content">
     <div class="container">
-        <?php if (empty($cart) || empty($products)): ?>
+        <?php if (empty($cart) || (empty($products) && empty($boxes))): ?>
             <!-- Empty Checkout -->
             <div class="empty-checkout">
                 <div class="empty-checkout-icon">
@@ -160,12 +196,24 @@ include __DIR__ . '/partials/header.php';
                                 <div class="form-group">
                                     <label for="phone">Phone Number</label>
                                     <input type="tel" id="phone" name="phone" class="form-control" 
-                                           placeholder="+233 XXX XXX XXX" required>
+                                           placeholder="+1 555 123 4567" required>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="country">Country</label>
+                                        <input type="text" id="country" name="country" class="form-control"
+                                               placeholder="e.g. Ghana" value="Ghana" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="postalCode">Postal / ZIP Code</label>
+                                        <input type="text" id="postalCode" name="postalCode" class="form-control"
+                                               placeholder="e.g. 00233" required>
+                                    </div>
                                 </div>
                                 <div class="form-group">
-                                    <label for="address">Delivery Address</label>
-                                    <input type="text" id="address" name="address" class="form-control" 
-                                           placeholder="Enter your full delivery address" required>
+                                    <label for="digitalAddress">GhanaPost Digital Address Code</label>
+                                    <input type="text" id="digitalAddress" name="digitalAddress" class="form-control"
+                                           placeholder="e.g. GA-123-4567" required>
                                 </div>
                                 <div class="form-row">
                                     <div class="form-group">
@@ -173,8 +221,8 @@ include __DIR__ . '/partials/header.php';
                                         <input type="text" id="city" name="city" class="form-control" 
                                                placeholder="Accra" required>
                                     </div>
-                                    <div class="form-group">
-                                        <label for="region">Region</label>
+                                    <div class="form-group" id="ghana-region-group">
+                                        <label for="region">Region (Ghana)</label>
                                         <select id="region" name="region" class="form-control" required>
                                             <option value="">Select Region</option>
                                             <option value="Greater Accra">Greater Accra</option>
@@ -184,6 +232,11 @@ include __DIR__ . '/partials/header.php';
                                             <option value="Eastern">Eastern</option>
                                             <option value="Northern">Northern</option>
                                         </select>
+                                    </div>
+                                    <div class="form-group" id="state-province-group" style="display:none;">
+                                        <label for="stateProvince">State / Province / Region</label>
+                                        <input type="text" id="stateProvince" name="stateProvince" class="form-control"
+                                               placeholder="e.g. California" value="">
                                     </div>
                                 </div>
                                 <div class="form-group">
@@ -195,32 +248,16 @@ include __DIR__ . '/partials/header.php';
                         </div>
                     </div>
 
-                    <!-- Payment Method -->
+                    <!-- Payment -->
                     <div class="checkout-card">
                         <div class="card-header">
                             <h3>
                                 <i class="bi bi-credit-card me-2"></i>
-                                Payment Method
+                                Payment
                             </h3>
                         </div>
                         <div class="card-body">
-                            <div class="payment-methods">
-                                <div class="payment-method active">
-                                    <div class="payment-radio">
-                                        <input type="radio" name="paymentMethod" id="paystack" value="paystack" checked>
-                                        <label for="paystack">
-                                            <div class="payment-icon">
-                                                <i class="bi bi-credit-card-fill"></i>
-                                            </div>
-                                            <div class="payment-info">
-                                                <div class="payment-name">Paystack</div>
-                                                <div class="payment-description">Secure payment with card, mobile money, or bank transfer</div>
-                                            </div>
-                                        </label>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="payment-security">
+                            <div class="payment-security" style="border-top: none; padding-top: 0;">
                                 <div class="security-item">
                                     <i class="bi bi-shield-check"></i>
                                     <span>SSL Encrypted</span>
@@ -233,6 +270,9 @@ include __DIR__ . '/partials/header.php';
                                     <i class="bi bi-patch-check"></i>
                                     <span>PCI Compliant</span>
                                 </div>
+                            </div>
+                            <div class="text-muted small mt-3">
+                                You’ll be redirected to Paystack to complete your payment.
                             </div>
                         </div>
                     </div>
@@ -251,25 +291,42 @@ include __DIR__ . '/partials/header.php';
                             <div class="order-items">
                                 <?php foreach ($cart as $item): ?>
                                     <?php
-                                    $pid = (int)$item['product_id'];
-                                    $qty = (int)$item['quantity'];
-                                    if (!isset($products[$pid])) continue;
-                                    $prod = $products[$pid];
-                                    $lineTotal = $prod['price'] * $qty;
+                                    $type = (string)($item['item_type'] ?? 'product');
+                                    $qty = (int)($item['quantity'] ?? 0);
+                                    if ($qty <= 0) continue;
+
+                                    $pid = (int)($item['product_id'] ?? 0);
+                                    $bid = (int)($item['box_id'] ?? 0);
+
+                                    if ($type === 'box') {
+                                        if (!isset($boxes[$bid])) continue;
+                                        $box = $boxes[$bid];
+                                        $name = $box['name'];
+                                        $image = $box['image'] ?? '';
+                                        $imageFolder = 'dripboxes';
+                                        $lineTotal = $box['price'] * $qty;
+                                    } else {
+                                        if (!isset($products[$pid])) continue;
+                                        $prod = $products[$pid];
+                                        $name = $prod['name'];
+                                        $image = $prod['image'] ?? '';
+                                        $imageFolder = 'products';
+                                        $lineTotal = $prod['price'] * $qty;
+                                    }
                                     ?>
                                     <div class="order-item">
                                         <div class="order-item-image">
-                                            <?php if ($prod['image']): ?>
-                                                <img src="<?php echo $basePath; ?>/assets/images/products/<?php echo htmlspecialchars($prod['image']); ?>" 
-                                                     alt="<?php echo htmlspecialchars($prod['name']); ?>">
+                                            <?php if (!empty($image)): ?>
+                                                <img src="<?php echo $basePath; ?>/assets/images/<?php echo $imageFolder; ?>/<?php echo htmlspecialchars($image); ?>" 
+                                                     alt="<?php echo htmlspecialchars($name); ?>">
                                             <?php else: ?>
                                                 <div class="order-item-placeholder">
-                                                    <i class="bi bi-image"></i>
+                                                    <i class="bi <?php echo $type === 'box' ? 'bi-box-seam' : 'bi-image'; ?>"></i>
                                                 </div>
                                             <?php endif; ?>
                                         </div>
                                         <div class="order-item-details">
-                                            <div class="order-item-name"><?php echo htmlspecialchars($prod['name']); ?></div>
+                                            <div class="order-item-name"><?php echo htmlspecialchars($name); ?></div>
                                             <div class="order-item-quantity">Quantity: <?php echo $qty; ?></div>
                                         </div>
                                         <div class="order-item-price">
@@ -635,6 +692,7 @@ include __DIR__ . '/partials/header.php';
 }
 
 .payment-icon {
+    flex: 0 0 50px;
     width: 50px;
     height: 50px;
     background: white;
@@ -648,7 +706,8 @@ include __DIR__ . '/partials/header.php';
 }
 
 .payment-info {
-    flex: 1;
+    flex: 1 1 auto;
+    min-width: 220px;
 }
 
 .payment-name {
@@ -660,6 +719,7 @@ include __DIR__ . '/partials/header.php';
 .payment-description {
     font-size: 0.875rem;
     color: #6b7280;
+    white-space: normal;
 }
 
 /* Payment Security */
@@ -911,18 +971,39 @@ document.getElementById('pay-now-btn').addEventListener('click', function() {
     const firstName = document.getElementById('firstName').value;
     const lastName = document.getElementById('lastName').value;
     const phone = document.getElementById('phone').value;
-    const address = document.getElementById('address').value;
+    const country = document.getElementById('country').value;
+    const postalCode = document.getElementById('postalCode').value;
+    const digitalAddress = document.getElementById('digitalAddress').value;
     const city = document.getElementById('city').value;
     const region = document.getElementById('region').value;
+    const stateProvince = document.getElementById('stateProvince').value;
+
+    const isGhana = (country || '').trim().toLowerCase() === 'ghana';
     
-    if (!firstName || !lastName || !phone || !address || !city || !region) {
+    if (!firstName || !lastName || !phone || !country || !postalCode || !city) {
         console.warn('Missing required shipping information fields.');
         return;
+    }
+
+    if (isGhana) {
+        if (!digitalAddress || !region) {
+            console.warn('Missing required Ghana shipping information fields.');
+            return;
+        }
+    } else {
+        if (!stateProvince) {
+            console.warn('Missing required global shipping information fields.');
+            return;
+        }
     }
     
     // Save shipping info to localStorage for potential use
     const shippingInfo = {
-        firstName, lastName, phone, address, city, region,
+        firstName, lastName, phone, country, postalCode,
+        digitalAddress: isGhana ? digitalAddress : '',
+        city,
+        region: isGhana ? region : '',
+        stateProvince: !isGhana ? stateProvince : '',
         notes: document.getElementById('notes').value
     };
     localStorage.setItem('checkout_shipping', JSON.stringify(shippingInfo));
@@ -935,6 +1016,7 @@ function proceedWithPayment() {
     // Show loading state
     const payBtn = document.getElementById('pay-now-btn');
     const originalText = payBtn.innerHTML;
+    payBtn.dataset.originalHtml = originalText;
     payBtn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Processing...';
     payBtn.disabled = true;
     
@@ -949,19 +1031,44 @@ function proceedWithPayment() {
     };
     
     window.DRIPYARD.basePath = '..';
-    
-    // Check if Paystack is available and configured
-    if (typeof PaystackPop !== 'undefined' && window.DRIPYARD.paystackPublicKey) {
-        // Use existing Paystack implementation
-        if (typeof paystackHandler === 'function') {
-            paystackHandler();
-        } else {
-            initPaystackPayment();
-        }
-    } else {
-        // Fallback for development or when Paystack is not configured
+
+    if (!window.DRIPYARD.paystackPublicKey) {
+        // Fallback when Paystack is not configured
         showPaymentFallback();
+        return;
     }
+
+    ensurePaystackLoaded()
+        .then(function () {
+            initPaystackPayment();
+        })
+        .catch(function (err) {
+            console.error('Could not load Paystack.', err);
+            showPaymentFallback();
+        });
+}
+
+function ensurePaystackLoaded() {
+    return new Promise(function (resolve, reject) {
+        if (typeof PaystackPop !== 'undefined') {
+            resolve();
+            return;
+        }
+
+        var existing = document.querySelector('script[src="https://js.paystack.co/v1/inline.js"]');
+        if (existing) {
+            existing.addEventListener('load', function () { resolve(); });
+            existing.addEventListener('error', function () { reject(new Error('Paystack script failed to load')); });
+            return;
+        }
+
+        var script = document.createElement('script');
+        script.src = 'https://js.paystack.co/v1/inline.js';
+        script.async = true;
+        script.onload = function () { resolve(); };
+        script.onerror = function () { reject(new Error('Paystack script failed to load')); };
+        document.head.appendChild(script);
+    });
 }
 
 function showPaymentFallback() {
@@ -1086,22 +1193,70 @@ function contactSupport() {
 
 // Phone number formatting
 document.getElementById('phone').addEventListener('input', function(e) {
-    let value = e.target.value.replace(/\D/g, '');
-    if (value.length > 0 && !value.startsWith('233')) {
-        value = '233' + value;
+    var raw = (e.target.value || '').trim();
+    // Allow optional leading +, then digits only
+    var hasPlus = raw.startsWith('+');
+    var digits = raw.replace(/\D/g, '');
+    // E.164 max is 15 digits
+    if (digits.length > 15) {
+        digits = digits.substring(0, 15);
     }
-    if (value.length > 12) {
-        value = value.substring(0, 12);
-    }
-    e.target.value = value;
+    e.target.value = (hasPlus ? '+' : (digits.length ? '+' : '')) + digits;
 });
+
+function updateShippingFieldsVisibility() {
+    var country = (document.getElementById('country').value || '').trim().toLowerCase();
+    var isGhana = country === 'ghana';
+
+    var digitalAddress = document.getElementById('digitalAddress');
+    var ghRegionGroup = document.getElementById('ghana-region-group');
+    var regionSelect = document.getElementById('region');
+    var stateGroup = document.getElementById('state-province-group');
+    var stateInput = document.getElementById('stateProvince');
+
+    if (isGhana) {
+        if (digitalAddress) digitalAddress.required = true;
+        if (regionSelect) regionSelect.required = true;
+        if (ghRegionGroup) ghRegionGroup.style.display = '';
+        if (stateGroup) stateGroup.style.display = 'none';
+        if (stateInput) stateInput.required = false;
+    } else {
+        if (digitalAddress) {
+            digitalAddress.required = false;
+            digitalAddress.value = '';
+        }
+        if (regionSelect) {
+            regionSelect.required = false;
+            regionSelect.value = '';
+        }
+        if (ghRegionGroup) ghRegionGroup.style.display = 'none';
+        if (stateGroup) stateGroup.style.display = '';
+        if (stateInput) stateInput.required = true;
+    }
+}
+
+document.getElementById('country').addEventListener('input', updateShippingFieldsVisibility);
+document.addEventListener('DOMContentLoaded', updateShippingFieldsVisibility);
 
 function initPaystackPayment() {
     const btn = document.getElementById('pay-now-btn');
     const details = window.DRIPYARD.checkout || {};
+
+    function resetBtn() {
+        const original = btn?.dataset?.originalHtml;
+        btn.innerHTML = original || '<i class="bi bi-lock me-2"></i>Complete Payment - <?php echo CurrencyManager::formatPrice($total); ?>';
+        btn.disabled = false;
+    }
     
     if (!details.totalAmount || !details.email) {
         console.error('Missing checkout details for Paystack initialisation.');
+        resetBtn();
+        return;
+    }
+
+    if (typeof PaystackPop === 'undefined') {
+        console.error('Paystack SDK not available.');
+        resetBtn();
         return;
     }
     
@@ -1115,8 +1270,10 @@ function initPaystackPayment() {
         ref: ref,
         callback: function (response) {
             const basePath = window.DRIPYARD.basePath || '..';
-            
-            // Send payment verification
+
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 25000);
+
             fetch(`${basePath}/backend/payment-callback.php`, {
                 method: 'POST',
                 headers: {
@@ -1124,50 +1281,54 @@ function initPaystackPayment() {
                 },
                 body: new URLSearchParams({
                     reference: response.reference,
-                })
+                }),
+                signal: controller.signal,
             })
-            .then(res => res.json())
-            .then(data => {
-                if (data.success) {
-                    window.location.href = `${basePath}/public/dashboard.php?order=success`;
-                } else {
-                    console.error('Payment verification failed:', data.message);
+            .then(async (res) => {
+                const text = await res.text();
+                let data;
+                try {
+                    data = JSON.parse(text);
+                } catch (e) {
+                    throw new Error('Invalid response from server: ' + text.slice(0, 200));
                 }
+
+                if (!res.ok) {
+                    throw new Error(data?.message || ('Request failed with status ' + res.status));
+                }
+
+                return data;
+            })
+            .then((data) => {
+                if (data && data.success) {
+                    window.location.href = `${basePath}/public/dashboard.php?order=success`;
+                    return;
+                }
+                throw new Error((data && data.message) ? data.message : 'Payment verification failed.');
             })
             .catch((err) => {
-                console.error('Could not verify payment. Please contact support.', err);
+                console.error('Could not verify payment.', err);
+                resetBtn();
+                alert('Payment completed, but we could not verify your order yet. Please try again or contact support.\n\n' + (err?.message || ''));
+            })
+            .finally(() => {
+                clearTimeout(timeout);
             });
         },
         onClose: function () {
-            // Reset button state
-            btn.innerHTML = '<i class="bi bi-lock me-2"></i>Complete Payment - <?php echo CurrencyManager::formatPrice($total); ?>';
-            btn.disabled = false;
+            resetBtn();
         },
         onError: function (error) {
             console.error('Paystack error:', error);
-            // Reset button state
-            btn.innerHTML = '<i class="bi bi-lock me-2"></i>Complete Payment - <?php echo CurrencyManager::formatPrice($total); ?>';
-            btn.disabled = false;
+            resetBtn();
         }
     });
     
     handler.openIframe();
 }
 
-// Phone number formatting
-document.getElementById('phone').addEventListener('input', function(e) {
-    let value = e.target.value.replace(/\D/g, '');
-    if (value.length > 0 && !value.startsWith('233')) {
-        value = '233' + value;
-    }
-    if (value.length > 12) {
-        value = value.substring(0, 12);
-    }
-    e.target.value = value;
-});
-
 // Auto-save form data
-const formFields = ['firstName', 'lastName', 'phone', 'address', 'city', 'region', 'notes'];
+const formFields = ['firstName', 'lastName', 'phone', 'country', 'postalCode', 'digitalAddress', 'city', 'region', 'stateProvince', 'notes'];
 formFields.forEach(fieldId => {
     const field = document.getElementById(fieldId);
     if (field) {
@@ -1182,19 +1343,6 @@ formFields.forEach(fieldId => {
             localStorage.setItem(`checkout_${fieldId}`, this.value);
         });
     }
-});
-
-// Payment method selection
-document.querySelectorAll('input[name="paymentMethod"]').forEach(radio => {
-    radio.addEventListener('change', function() {
-        // Remove active class from all payment methods
-        document.querySelectorAll('.payment-method').forEach(method => {
-            method.classList.remove('active');
-        });
-        
-        // Add active class to selected payment method
-        this.closest('.payment-method').classList.add('active');
-    });
 });
 
 // Set base path and initialize

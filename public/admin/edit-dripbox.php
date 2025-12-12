@@ -19,6 +19,17 @@ if (!$box) {
     exit;
 }
 
+$stmtProducts = $pdo->query('SELECT p.*, c.name AS category_name FROM products p JOIN categories c ON p.category_id = c.id ORDER BY p.created_at DESC');
+$products = $stmtProducts->fetchAll();
+
+$stmtIncluded = $pdo->prepare('SELECT product_id, quantity FROM dripbox_products WHERE box_id = ?');
+$stmtIncluded->execute([$id]);
+$includedRows = $stmtIncluded->fetchAll();
+$included = [];
+foreach ($includedRows as $r) {
+    $included[(int)$r['product_id']] = (int)$r['quantity'];
+}
+
 $message = '';
 $error = '';
 
@@ -62,10 +73,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     
     if (!$error && $name !== '' && $price > 0) {
-        $stmt = $pdo->prepare('UPDATE sunnydripboxes SET name = ?, theme = ?, description = ?, price = ?, image = ? WHERE id = ?');
-        $stmt->execute([$name, $theme, $description, $price, $image, $id]);
-        header('Location: products.php?success=dripbox_updated');
-        exit;
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare('UPDATE sunnydripboxes SET name = ?, theme = ?, description = ?, price = ?, image = ? WHERE id = ?');
+            $stmt->execute([$name, $theme, $description, $price, $image, $id]);
+
+            $pdo->prepare('DELETE FROM dripbox_products WHERE box_id = ?')->execute([$id]);
+            $selectedProducts = $_POST['box_products'] ?? [];
+            if (is_array($selectedProducts) && $selectedProducts) {
+                $ins = $pdo->prepare('INSERT INTO dripbox_products (box_id, product_id, quantity) VALUES (?, ?, ?)');
+                foreach ($selectedProducts as $productIdRaw => $qtyRaw) {
+                    $productId = (int)$productIdRaw;
+                    $qty = (int)$qtyRaw;
+                    if ($productId <= 0) {
+                        continue;
+                    }
+                    if ($qty <= 0) {
+                        $qty = 1;
+                    }
+                    $ins->execute([$id, $productId, $qty]);
+                }
+            }
+
+            $pdo->commit();
+            header('Location: products.php?success=dripbox_updated');
+            exit;
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            $error = 'Failed to update DripBox: ' . $e->getMessage();
+        }
     } elseif (!$error) {
         $error = 'Please fill in all required fields.';
     }
@@ -123,6 +161,29 @@ include __DIR__ . '/../partials/admin_header.php';
                         <label class="form-label">Description</label>
                         <textarea name="box_description" rows="4" class="form-control" placeholder="Describe what's included in this bundle..."><?php echo htmlspecialchars($box['description']); ?></textarea>
                     </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Select Products in this DripBox</label>
+                        <div class="border rounded p-2" style="max-height: 320px; overflow: auto;">
+                            <?php if (empty($products)): ?>
+                                <div class="text-muted small">No products found. Add products first.</div>
+                            <?php else: ?>
+                                <?php foreach ($products as $p): ?>
+                                    <?php $pid = (int)$p['id']; ?>
+                                    <?php $isIncluded = array_key_exists($pid, $included); ?>
+                                    <div class="d-flex align-items-center gap-2 py-1">
+                                        <input class="form-check-input dripbox-product-check" type="checkbox" id="box-prod-<?php echo $pid; ?>" data-product-id="<?php echo $pid; ?>" <?php echo $isIncluded ? 'checked' : ''; ?>>
+                                        <label class="form-check-label flex-grow-1" for="box-prod-<?php echo $pid; ?>">
+                                            <?php echo htmlspecialchars($p['name']); ?>
+                                            <span class="text-muted small">(<?php echo htmlspecialchars($p['category_name']); ?>)</span>
+                                        </label>
+                                        <input type="number" min="1" value="<?php echo $isIncluded ? (int)$included[$pid] : 1; ?>" class="form-control form-control-sm" style="width: 90px;" name="box_products[<?php echo $pid; ?>]" id="box-qty-<?php echo $pid; ?>" <?php echo $isIncluded ? '' : 'disabled'; ?>>
+                                    </div>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </div>
+                        <div class="form-text">Tick products to include in the DripBox, then set quantity for each.</div>
+                    </div>
                 </div>
             </div>
             
@@ -139,3 +200,18 @@ include __DIR__ . '/../partials/admin_header.php';
 </div>
 
 <?php include __DIR__ . '/../partials/admin_footer.php'; ?>
+
+<script>
+document.querySelectorAll('.dripbox-product-check').forEach(function(cb) {
+    cb.addEventListener('change', function() {
+        var pid = cb.getAttribute('data-product-id');
+        var qty = document.getElementById('box-qty-' + pid);
+        if (qty) {
+            qty.disabled = !cb.checked;
+            if (!cb.checked) {
+                qty.value = '1';
+            }
+        }
+    });
+});
+</script>

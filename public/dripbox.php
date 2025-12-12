@@ -143,12 +143,12 @@ include __DIR__ . '/partials/header.php';
                         <span class="current-price"><?php echo CurrencyManager::formatPrice($featuredBox['price']); ?></span>
                     </div>
                     <div class="featured-actions">
-                        <a href="checkout.php?box=<?php echo (int)$featuredBox['id']; ?>" class="btn btn-primary btn-lg">
+                        <button type="button" class="btn btn-primary btn-lg add-box-to-cart-btn" data-box-id="<?php echo (int)$featuredBox['id']; ?>">
                             <i class="bi bi-bag-plus me-2"></i>Get This DripBox
-                        </a>
-                        <button class="btn btn-outline-secondary" onclick="viewDetails(<?php echo (int)$featuredBox['id']; ?>)">
-                            <i class="bi bi-eye me-2"></i>View Details
                         </button>
+                        <a class="btn btn-outline-secondary" href="dripbox-details.php?id=<?php echo (int)$featuredBox['id']; ?>">
+                            <i class="bi bi-eye me-2"></i>View Details
+                        </a>
                     </div>
                 </div>
                 <div class="featured-box-visual">
@@ -213,11 +213,11 @@ include __DIR__ . '/partials/header.php';
                                     <button class="btn btn-icon btn-wishlist" data-box-id="<?php echo (int)$box['id']; ?>">
                                         <i class="bi bi-heart"></i>
                                     </button>
-                                    <button class="btn btn-icon btn-quickview" onclick="quickView(<?php echo (int)$box['id']; ?>)">
+                                    <a class="btn btn-icon btn-quickview" href="dripbox-details.php?id=<?php echo (int)$box['id']; ?>">
                                         <i class="bi bi-eye"></i>
-                                    </button>
+                                    </a>
                                 </div>
-                                <button class="btn btn-get-box" onclick="getBox(<?php echo (int)$box['id']; ?>)">
+                                <button class="btn btn-get-box add-box-to-cart-btn" data-box-id="<?php echo (int)$box['id']; ?>">
                                     <i class="bi bi-bag-plus me-2"></i>Get This Box
                                 </button>
                             </div>
@@ -1157,78 +1157,6 @@ function showHowItWorks() {
     modal.addEventListener('hidden.bs.modal', () => {
         document.body.removeChild(modal);
     });
-}
-
-// View details
-function viewDetails(boxId) {
-    // For now, just scroll to the box or show a simple modal
-    const boxElement = document.querySelector(`[data-box-id="${boxId}"]`);
-    if (boxElement) {
-        boxElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        // Highlight the box temporarily
-        boxElement.style.transform = 'scale(1.05)';
-        boxElement.style.boxShadow = '0 20px 40px rgba(102, 126, 234, 0.3)';
-        setTimeout(() => {
-            boxElement.style.transform = '';
-            boxElement.style.boxShadow = '';
-        }, 1000);
-    }
-}
-
-// Quick view
-function quickView(boxId) {
-    // Create a simple quick view modal
-    const modal = document.createElement('div');
-    modal.className = 'modal fade';
-    modal.innerHTML = `
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">DripBox Quick View</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body text-center">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                    <p class="mt-3">Loading DripBox details...</p>
-                </div>
-            </div>
-        </div>
-    `;
-    document.body.appendChild(modal);
-    const bsModal = new bootstrap.Modal(modal);
-    bsModal.show();
-    
-    // Simulate loading and then show content
-    setTimeout(() => {
-        modal.querySelector('.modal-body').innerHTML = `
-            <div class="text-center">
-                <i class="bi bi-box-seam display-1 text-primary mb-3"></i>
-                <h4>DripBox Details</h4>
-                <p>This DripBox contains 5+ carefully curated items including tops, bottoms, and accessories.</p>
-                <div class="d-grid gap-2 d-md-flex justify-content-md-center">
-                    <button class="btn btn-primary" onclick="getBox(${boxId})">
-                        <i class="bi bi-bag-plus me-2"></i>Get This Box
-                    </button>
-                    <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
-                </div>
-            </div>
-        `;
-    }, 1000);
-    
-    modal.addEventListener('hidden.bs.modal', () => {
-        document.body.removeChild(modal);
-    });
-}
-
-// Get box
-function getBox(boxId) {
-    // Add to cart as a special box item
-    const basePath = window.DRIPYARD && window.DRIPYARD.basePath ? window.DRIPYARD.basePath : '..';
-    
-    // For DripBoxes, we'll redirect to checkout with the box ID
-    window.location.href = `${basePath}/checkout.php?box=${boxId}`;
 }
 
 // FAQ toggle

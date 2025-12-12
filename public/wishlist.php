@@ -129,11 +129,11 @@ include __DIR__ . '/partials/header.php';
                                 <button class="btn btn-icon btn-wishlist" data-box-id="<?php echo (int)$box['id']; ?>">
                                     <i class="bi bi-heart-fill"></i>
                                 </button>
-                                <button class="btn btn-icon btn-quickview" onclick="quickView(<?php echo (int)$box['id']; ?>)">
+                                <a class="btn btn-icon btn-quickview" href="dripbox-details.php?id=<?php echo (int)$box['id']; ?>">
                                     <i class="bi bi-eye"></i>
-                                </button>
+                                </a>
                             </div>
-                            <button class="btn btn-get-box" onclick="getBox(<?php echo (int)$box['id']; ?>)">
+                            <button class="btn btn-get-box add-box-to-cart-btn" data-box-id="<?php echo (int)$box['id']; ?>">
                                 <i class="bi bi-lightning-charge me-2"></i>Get This Box
                             </button>
                         </div>

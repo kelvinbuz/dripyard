@@ -8,27 +8,63 @@ require_once __DIR__ . '/../backend/currency.php';
 $pdo = getPDO();
 $cart = getCart();
 $products = [];
+$boxes = [];
 $total = 0.0;
 $discount = 0.0;
 
 if (!empty($cart)) {
-    $ids = array_map('intval', array_column($cart, 'product_id'));
-    $placeholders = implode(',', array_fill(0, count($ids), '?'));
-    $stmt = $pdo->prepare("SELECT id, name, price, stock, image FROM products WHERE id IN ($placeholders)");
-    $stmt->execute($ids);
-    $rows = $stmt->fetchAll();
-    foreach ($rows as $row) {
-        $products[$row['id']] = $row;
+    $productIds = [];
+    $boxIds = [];
+    foreach ($cart as $item) {
+        $type = (string)($item['item_type'] ?? 'product');
+        if ($type === 'box') {
+            $boxIds[] = (int)($item['box_id'] ?? 0);
+        } else {
+            $productIds[] = (int)($item['product_id'] ?? 0);
+        }
+    }
+    $productIds = array_values(array_unique(array_filter($productIds)));
+    $boxIds = array_values(array_unique(array_filter($boxIds)));
+
+    if (!empty($productIds)) {
+        $placeholders = implode(',', array_fill(0, count($productIds), '?'));
+        $stmt = $pdo->prepare("SELECT id, name, price, stock, image FROM products WHERE id IN ($placeholders)");
+        $stmt->execute($productIds);
+        $rows = $stmt->fetchAll();
+        foreach ($rows as $row) {
+            $products[$row['id']] = $row;
+        }
+    }
+
+    if (!empty($boxIds)) {
+        $placeholders = implode(',', array_fill(0, count($boxIds), '?'));
+        $stmt = $pdo->prepare("SELECT id, name, price, image FROM sunnydripboxes WHERE id IN ($placeholders)");
+        $stmt->execute($boxIds);
+        $rows = $stmt->fetchAll();
+        foreach ($rows as $row) {
+            $boxes[$row['id']] = $row;
+        }
     }
 }
 
 // Calculate totals
 $subtotal = 0.0;
 foreach ($cart as $item) {
-    $pid = (int)$item['product_id'];
-    $qty = (int)$item['quantity'];
-    if (isset($products[$pid])) {
-        $subtotal += $products[$pid]['price'] * $qty;
+    $type = (string)($item['item_type'] ?? 'product');
+    $qty = (int)($item['quantity'] ?? 0);
+    if ($qty <= 0) {
+        continue;
+    }
+    if ($type === 'box') {
+        $bid = (int)($item['box_id'] ?? 0);
+        if (isset($boxes[$bid])) {
+            $subtotal += $boxes[$bid]['price'] * $qty;
+        }
+    } else {
+        $pid = (int)($item['product_id'] ?? 0);
+        if (isset($products[$pid])) {
+            $subtotal += $products[$pid]['price'] * $qty;
+        }
     }
 }
 
@@ -113,48 +149,77 @@ include __DIR__ . '/partials/header.php';
                     <div class="cart-items">
                         <?php foreach ($cart as $index => $item): ?>
                             <?php
-                            $pid = (int)$item['product_id'];
-                            $qty = (int)$item['quantity'];
-                            if (!isset($products[$pid])) continue;
-                            $prod = $products[$pid];
-                            $lineTotal = $prod['price'] * $qty;
+                            $type = (string)($item['item_type'] ?? 'product');
+                            $qty = (int)($item['quantity'] ?? 0);
+                            if ($qty <= 0) continue;
+
+                            $pid = (int)($item['product_id'] ?? 0);
+                            $bid = (int)($item['box_id'] ?? 0);
+
+                            if ($type === 'box') {
+                                if (!isset($boxes[$bid])) continue;
+                                $box = $boxes[$bid];
+                                $lineTotal = $box['price'] * $qty;
+                            } else {
+                                if (!isset($products[$pid])) continue;
+                                $prod = $products[$pid];
+                                $lineTotal = $prod['price'] * $qty;
+                            }
                             ?>
                             <div class="cart-item" data-index="<?php echo $index; ?>">
                                 <div class="cart-item-image">
-                                    <?php if ($prod['image']): ?>
-                                        <img src="<?php echo $basePath; ?>/assets/images/products/<?php echo htmlspecialchars($prod['image']); ?>" 
-                                             alt="<?php echo htmlspecialchars($prod['name']); ?>">
+                                    <?php if ($type === 'box'): ?>
+                                        <?php if (!empty($box['image'])): ?>
+                                            <img src="<?php echo $basePath; ?>/assets/images/dripboxes/<?php echo htmlspecialchars($box['image']); ?>" 
+                                                 alt="<?php echo htmlspecialchars($box['name']); ?>">
+                                        <?php else: ?>
+                                            <div class="cart-item-placeholder">
+                                                <i class="bi bi-box-seam"></i>
+                                            </div>
+                                        <?php endif; ?>
                                     <?php else: ?>
-                                        <div class="cart-item-placeholder">
-                                            <i class="bi bi-image"></i>
-                                        </div>
+                                        <?php if (!empty($prod['image'])): ?>
+                                            <img src="<?php echo $basePath; ?>/assets/images/products/<?php echo htmlspecialchars($prod['image']); ?>" 
+                                                 alt="<?php echo htmlspecialchars($prod['name']); ?>">
+                                        <?php else: ?>
+                                            <div class="cart-item-placeholder">
+                                                <i class="bi bi-image"></i>
+                                            </div>
+                                        <?php endif; ?>
                                     <?php endif; ?>
                                 </div>
                                 
                                 <div class="cart-item-details">
-                                    <h3 class="cart-item-name"><?php echo htmlspecialchars($prod['name']); ?></h3>
+                                    <h3 class="cart-item-name"><?php echo htmlspecialchars($type === 'box' ? $box['name'] : $prod['name']); ?></h3>
                                     <div class="cart-item-meta">
-                                        <span class="stock-info">
-                                            <i class="bi bi-check-circle"></i>
-                                            <?php echo (int)$prod['stock']; ?> in stock
-                                        </span>
-                                        <span class="item-id">SKU: #<?php echo str_pad($pid, 6, '0', STR_PAD_LEFT); ?></span>
+                                        <?php if ($type === 'box'): ?>
+                                            <span class="stock-info">
+                                                <i class="bi bi-box-seam"></i>
+                                                DripBox
+                                            </span>
+                                            <span class="item-id">BOX: #<?php echo str_pad($bid, 6, '0', STR_PAD_LEFT); ?></span>
+                                        <?php else: ?>
+                                            <span class="stock-info">
+                                                <i class="bi bi-check-circle"></i>
+                                                <?php echo (int)$prod['stock']; ?> in stock
+                                            </span>
+                                            <span class="item-id">SKU: #<?php echo str_pad($pid, 6, '0', STR_PAD_LEFT); ?></span>
+                                        <?php endif; ?>
                                     </div>
                                     <div class="cart-item-price">
-                                        <?php echo CurrencyManager::formatPrice($prod['price']); ?>
+                                        <?php echo CurrencyManager::formatPrice($type === 'box' ? $box['price'] : $prod['price']); ?>
                                     </div>
                                 </div>
                                 
                                 <div class="cart-item-quantity">
                                     <div class="quantity-controls">
-                                        <button class="btn-quantity btn-decrease" onclick="updateQuantity(<?php echo $pid; ?>, <?php echo $qty - 1; ?>)">
+                                        <button class="btn-quantity btn-decrease" onclick="updateQuantity(<?php echo json_encode($type); ?>, <?php echo (int)($type === 'box' ? $bid : $pid); ?>, <?php echo $qty - 1; ?>)">
                                             <i class="bi bi-dash"></i>
                                         </button>
                                         <input type="number" class="quantity-input" value="<?php echo $qty; ?>" 
-                                               min="1" max="<?php echo (int)$prod['stock']; ?>"
-                                               data-product-id="<?php echo $pid; ?>"
-                                               onchange="updateQuantity(<?php echo $pid; ?>, this.value)">
-                                        <button class="btn-quantity btn-increase" onclick="updateQuantity(<?php echo $pid; ?>, <?php echo $qty + 1; ?>)">
+                                               min="1" <?php echo $type === 'box' ? '' : 'max="' . (int)$prod['stock'] . '"'; ?>
+                                               onchange="updateQuantity(<?php echo json_encode($type); ?>, <?php echo (int)($type === 'box' ? $bid : $pid); ?>, this.value)">
+                                        <button class="btn-quantity btn-increase" onclick="updateQuantity(<?php echo json_encode($type); ?>, <?php echo (int)($type === 'box' ? $bid : $pid); ?>, <?php echo $qty + 1; ?>)">
                                             <i class="bi bi-plus"></i>
                                         </button>
                                     </div>
@@ -165,10 +230,12 @@ include __DIR__ . '/partials/header.php';
                                 </div>
                                 
                                 <div class="cart-item-actions">
-                                    <button class="btn btn-icon btn-wishlist" title="Save for later" data-product-id="<?php echo $pid; ?>">
-                                        <i class="bi bi-heart"></i>
-                                    </button>
-                                    <button class="btn btn-icon btn-remove" title="Remove item" onclick="removeItem(<?php echo $pid; ?>)">
+                                    <?php if ($type !== 'box'): ?>
+                                        <button class="btn btn-icon btn-wishlist" title="Save for later" data-product-id="<?php echo $pid; ?>">
+                                            <i class="bi bi-heart"></i>
+                                        </button>
+                                    <?php endif; ?>
+                                    <button class="btn btn-icon btn-remove" title="Remove item" onclick="removeItem(<?php echo json_encode($type); ?>, <?php echo (int)($type === 'box' ? $bid : $pid); ?>)">
                                         <i class="bi bi-trash"></i>
                                     </button>
                                 </div>
@@ -912,7 +979,7 @@ include __DIR__ . '/partials/header.php';
 
 <script>
 // Cart functionality
-function updateQuantity(productId, newQuantity) {
+function updateQuantity(itemType, id, newQuantity) {
     if (newQuantity < 1) return;
     
     const basePath = window.DRIPYARD && window.DRIPYARD.basePath ? window.DRIPYARD.basePath : '..';
@@ -922,11 +989,11 @@ function updateQuantity(productId, newQuantity) {
         headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: new URLSearchParams({
+        body: new URLSearchParams(Object.assign({
             action: 'update',
-            product_id: productId,
+            item_type: itemType,
             quantity: newQuantity
-        })
+        }, itemType === 'box' ? { box_id: id } : { product_id: id }))
     })
     .then(response => response.json())
     .then(data => {
@@ -941,7 +1008,7 @@ function updateQuantity(productId, newQuantity) {
     });
 }
 
-function removeItem(productId) {
+function removeItem(itemType, id) {
     if (confirm('Are you sure you want to remove this item?')) {
         const basePath = window.DRIPYARD && window.DRIPYARD.basePath ? window.DRIPYARD.basePath : '..';
         
@@ -950,10 +1017,10 @@ function removeItem(productId) {
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
             },
-            body: new URLSearchParams({
+            body: new URLSearchParams(Object.assign({
                 action: 'remove',
-                product_id: productId
-            })
+                item_type: itemType
+            }, itemType === 'box' ? { box_id: id } : { product_id: id }))
         })
         .then(response => response.json())
         .then(data => {

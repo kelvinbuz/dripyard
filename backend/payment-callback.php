@@ -34,10 +34,16 @@ curl_setopt($ch, CURLOPT_HTTPHEADER, [
     'Cache-Control: no-cache',
 ]);
 
+// Avoid hanging requests
+curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+curl_setopt($ch, CURLOPT_TIMEOUT, 25);
+
 $response = curl_exec($ch);
 if ($response === false) {
+    $err = curl_error($ch);
+    curl_close($ch);
     http_response_code(500);
-    echo json_encode(['success' => false, 'message' => 'Could not contact Paystack.']);
+    echo json_encode(['success' => false, 'message' => 'Could not contact Paystack. ' . ($err ? ('(' . $err . ')') : '')]);
     exit;
 }
 
@@ -75,29 +81,58 @@ try {
     $itemsForInsert = [];
 
     foreach ($cart as $row) {
-        $productId = (int)$row['product_id'];
-        $quantity = (int)$row['quantity'];
-
-        $stmt = $pdo->prepare('SELECT id, price, stock FROM products WHERE id = ? LIMIT 1');
-        $stmt->execute([$productId]);
-        $product = $stmt->fetch();
-
-        if (!$product) {
-            throw new RuntimeException('One of the products in your cart no longer exists.');
+        $type = (string)($row['item_type'] ?? 'product');
+        $quantity = (int)($row['quantity'] ?? 0);
+        if ($quantity <= 0) {
+            continue;
         }
 
-        if ($quantity > (int)$product['stock']) {
-            throw new RuntimeException('Not enough stock for one of the products in your cart.');
+        if ($type === 'box') {
+            $boxId = (int)($row['box_id'] ?? 0);
+            $stmt = $pdo->prepare('SELECT id, name, price FROM sunnydripboxes WHERE id = ? LIMIT 1');
+            $stmt->execute([$boxId]);
+            $box = $stmt->fetch();
+            if (!$box) {
+                throw new RuntimeException('One of the DripBoxes in your cart no longer exists.');
+            }
+
+            $lineTotal = $box['price'] * $quantity;
+            $totalAmount += $lineTotal;
+
+            $itemsForInsert[] = [
+                'item_type' => 'box',
+                'box_id' => $boxId,
+                'product_id' => null,
+                'quantity' => $quantity,
+                'price' => $box['price'],
+                'name' => $box['name'],
+            ];
+        } else {
+            $productId = (int)($row['product_id'] ?? 0);
+            $stmt = $pdo->prepare('SELECT id, name, price, stock FROM products WHERE id = ? LIMIT 1');
+            $stmt->execute([$productId]);
+            $product = $stmt->fetch();
+
+            if (!$product) {
+                throw new RuntimeException('One of the products in your cart no longer exists.');
+            }
+
+            if ($quantity > (int)$product['stock']) {
+                throw new RuntimeException('Not enough stock for one of the products in your cart.');
+            }
+
+            $lineTotal = $product['price'] * $quantity;
+            $totalAmount += $lineTotal;
+
+            $itemsForInsert[] = [
+                'item_type' => 'product',
+                'box_id' => null,
+                'product_id' => $productId,
+                'quantity' => $quantity,
+                'price' => $product['price'],
+                'name' => $product['name'],
+            ];
         }
-
-        $lineTotal = $product['price'] * $quantity;
-        $totalAmount += $lineTotal;
-
-        $itemsForInsert[] = [
-            'product_id' => $productId,
-            'quantity' => $quantity,
-            'price' => $product['price'],
-        ];
     }
 
     // Simple validation to ensure the amount paid matches the cart total
@@ -115,17 +150,22 @@ try {
 
     $orderId = (int)$pdo->lastInsertId();
 
-    $itemStmt = $pdo->prepare('INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)');
+    $itemStmt = $pdo->prepare('INSERT INTO order_items (order_id, item_type, product_id, box_id, quantity, price, name) VALUES (?, ?, ?, ?, ?, ?, ?)');
     $stockStmt = $pdo->prepare('UPDATE products SET stock = stock - ? WHERE id = ?');
 
     foreach ($itemsForInsert as $item) {
         $itemStmt->execute([
             $orderId,
+            $item['item_type'],
             $item['product_id'],
+            $item['box_id'],
             $item['quantity'],
             $item['price'],
+            $item['name'],
         ]);
-        $stockStmt->execute([$item['quantity'], $item['product_id']]);
+        if ($item['item_type'] === 'product') {
+            $stockStmt->execute([$item['quantity'], $item['product_id']]);
+        }
     }
 
     $pdo->commit();

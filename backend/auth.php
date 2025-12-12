@@ -36,6 +36,8 @@ function loginUser(string $email, string $password): array
 {
     $pdo = getPDO();
 
+    $guestCart = isset($_SESSION['cart']) && is_array($_SESSION['cart']) ? $_SESSION['cart'] : [];
+
     $stmt = $pdo->prepare('SELECT * FROM users WHERE email = ? LIMIT 1');
     $stmt->execute([$email]);
     $user = $stmt->fetch();
@@ -46,6 +48,32 @@ function loginUser(string $email, string $password): array
 
     $_SESSION['user_id'] = (int)$user['id'];
     $_SESSION['user_role'] = $user['role'];
+
+    if (!empty($guestCart)) {
+        try {
+            $userId = (int)$user['id'];
+            $existing = loadUserCart($userId);
+
+            foreach ($guestCart as $item) {
+                $pid = (int)($item['product_id'] ?? 0);
+                $qty = (int)($item['quantity'] ?? 0);
+                if ($pid <= 0 || $qty <= 0) {
+                    continue;
+                }
+
+                $currentQty = isset($existing[$pid]) ? (int)$existing[$pid]['quantity'] : 0;
+                $existing[$pid] = [
+                    'product_id' => $pid,
+                    'quantity' => $currentQty + $qty,
+                ];
+            }
+
+            saveUserCart($userId, $existing);
+            $_SESSION['cart'] = [];
+        } catch (Throwable $e) {
+            // keep session cart if DB cart merge fails
+        }
+    }
 
     return ['success' => true, 'message' => 'Login successful.'];
 }

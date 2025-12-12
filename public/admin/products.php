@@ -61,10 +61,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         if ($boxName !== '' && $boxPrice > 0) {
-            $stmt = $pdo->prepare('INSERT INTO sunnydripboxes (name, theme, description, price, image, created_at) VALUES (?, ?, ?, ?, ?, NOW())');
-            $stmt->execute([$boxName, $boxTheme, $boxDescription, $boxPrice, $boxImage]);
-            header('Location: products.php?success=dripbox_added');
-            exit;
+            $pdo->beginTransaction();
+            try {
+                $stmt = $pdo->prepare('INSERT INTO sunnydripboxes (name, theme, description, price, image, created_at) VALUES (?, ?, ?, ?, ?, NOW())');
+                $stmt->execute([$boxName, $boxTheme, $boxDescription, $boxPrice, $boxImage]);
+                $boxId = (int)$pdo->lastInsertId();
+
+                $selectedProducts = $_POST['box_products'] ?? [];
+                if (is_array($selectedProducts) && $selectedProducts) {
+                    $ins = $pdo->prepare('INSERT INTO dripbox_products (box_id, product_id, quantity) VALUES (?, ?, ?)');
+                    foreach ($selectedProducts as $productIdRaw => $qtyRaw) {
+                        $productId = (int)$productIdRaw;
+                        $qty = (int)$qtyRaw;
+                        if ($productId <= 0) {
+                            continue;
+                        }
+                        if ($qty <= 0) {
+                            $qty = 1;
+                        }
+                        $ins->execute([$boxId, $productId, $qty]);
+                    }
+                }
+
+                $pdo->commit();
+                header('Location: products.php?success=dripbox_added');
+                exit;
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                $message = 'Failed to create DripBox: ' . $e->getMessage();
+            }
         }
     }
     
@@ -279,16 +306,16 @@ if (isset($_GET['success'])) {
     </div>
 </div>
 
-<!-- Category Management Section -->
+<!-- Category Management Section (optional/cleanup) -->
 <div class="admin-card mb-4">
     <div class="card-body">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h5 class="card-title mb-0">
-                <i class="bi bi-tags me-2"></i>Category Management
+                <i class="bi bi-tags me-2"></i>Category Overview
                 <span class="badge bg-secondary ms-2"><?php echo count($categories); ?></span>
             </h5>
             <button class="btn btn-admin-primary" data-bs-toggle="modal" data-bs-target="#categoryModal">
-                <i class="bi bi-plus-circle me-2"></i>Add Category
+                <i class="bi bi-plus-circle me-2"></i>New Category (optional)
             </button>
         </div>
         
@@ -296,7 +323,7 @@ if (isset($_GET['success'])) {
             <div class="text-center py-5">
                 <i class="bi bi-tags fs-1 text-muted mb-3"></i>
                 <h6 class="text-muted">No categories yet</h6>
-                <p class="text-muted small">Create categories to organize your products</p>
+                <p class="text-muted small">Categories are created automatically when you assign a category name on a product. You can also create one manually if needed.</p>
                 <button class="btn btn-admin-primary" data-bs-toggle="modal" data-bs-target="#categoryModal">Create Category</button>
             </div>
         <?php else: ?>
@@ -351,83 +378,14 @@ if (isset($_GET['success'])) {
     </div>
 </div>
 
-<!-- DripBox Section -->
-<div class="admin-card mb-4">
-    <div class="card-body">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="card-title mb-0">
-                <i class="bi bi-box me-2"></i>DripBox Bundles
-                <span class="badge bg-secondary ms-2"><?php echo count($boxes); ?></span>
-            </h5>
-            <button class="btn btn-admin-primary" data-bs-toggle="modal" data-bs-target="#dripboxModal">
-                <i class="bi bi-plus-circle me-2"></i>Add DripBox
-            </button>
-        </div>
-        
-        <?php if (empty($boxes)): ?>
-            <div class="text-center py-5">
-                <i class="bi bi-box fs-1 text-muted mb-3"></i>
-                <h6 class="text-muted">No DripBox bundles yet</h6>
-                <p class="text-muted small">Create curated outfit bundles for your customers</p>
-                <button class="btn btn-admin-primary" data-bs-toggle="modal" data-bs-target="#dripboxModal">Create DripBox</button>
-            </div>
-        <?php else: ?>
-            <div class="table-responsive admin-table">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Image</th>
-                            <th>Name</th>
-                            <th>Theme</th>
-                            <th>Price</th>
-                            <th>Description</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($boxes as $box): ?>
-                            <tr>
-                                <td>
-                                    <div class="product-image">
-                                        <?php if ($box['image']): ?>
-                                            <img src="<?php echo $basePath; ?>/assets/images/dripboxes/<?php echo htmlspecialchars($box['image']); ?>" 
-                                                 alt="<?php echo htmlspecialchars($box['name']); ?>" 
-                                                 style="width: 40px; height: 40px; object-fit: cover; border: 1px solid #e2e8f0; border-radius: 0.5rem;">
-                                        <?php else: ?>
-                                            <div class="product-image-placeholder"></div>
-                                        <?php endif; ?>
-                                    </div>
-                                </td>
-                                <td class="fw-semibold"><?php echo htmlspecialchars($box['name']); ?></td>
-                                <td><span class="badge bg-info text-dark"><?php echo htmlspecialchars($box['theme']); ?></span></td>
-                                <td class="fw-semibold"><?php echo CurrencyManager::formatPrice($box['price']); ?></td>
-                                <td class="text-muted small"><?php echo htmlspecialchars(substr($box['description'], 0, 50) . '...'); ?></td>
-                                <td>
-                                    <div class="table-actions">
-                                        <button class="btn btn-sm btn-admin-secondary" onclick="editDripBox(<?php echo (int)$box['id']; ?>)">
-                                            <i class="bi bi-pencil"></i>
-                                        </button>
-                                        <button class="btn btn-sm btn-admin-danger" onclick="deleteDripBox(<?php echo (int)$box['id']; ?>)">
-                                            <i class="bi bi-trash"></i>
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-        <?php endif; ?>
-    </div>
-</div>
 <?php include __DIR__ . '/../partials/admin_footer.php'; ?>
 
-<!-- Category Modal -->
+<!-- Category Modal (manual category creation) -->
 <div class="modal fade" id="categoryModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Add New Category</h5>
+                <h5 class="modal-title">Add New Category (optional)</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form method="post">
@@ -435,50 +393,9 @@ if (isset($_GET['success'])) {
                     <div class="mb-3">
                         <label class="form-label">Category Name <span class="text-danger">*</span></label>
                         <input type="text" name="new_category_name" class="form-control" required placeholder="e.g., T-Shirts, Hoodies, Accessories">
-                        <div class="form-text">Create a new category to organize your products</div>
+                        <div class="form-text">Most categories are created automatically from the product forms. Use this only if you need to pre-create or tidy up categories.</div>
                     </div>
                     <button type="submit" class="btn btn-admin-primary">Create Category</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- DripBox Modal -->
-<div class="modal fade" id="dripboxModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Add New DripBox Bundle</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <form method="post" enctype="multipart/form-data">
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label">Bundle Name</label>
-                        <input type="text" name="box_name" class="form-control" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Theme</label>
-                        <input type="text" name="box_theme" class="form-control" placeholder="e.g., Casual Weekend">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Price (GH₵)</label>
-                        <input type="number" name="box_price" class="form-control" min="0" step="0.01" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Bundle Image</label>
-                        <input type="file" name="box_image" class="form-control" accept="image/*">
-                        <div class="form-text">Allowed formats: JPG, PNG, GIF, WebP (Max 5MB)</div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Description</label>
-                        <textarea name="box_description" rows="3" class="form-control" placeholder="Describe what's included in this bundle..."></textarea>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" name="save_box" value="1" class="btn btn-admin-primary">Create DripBox</button>
                 </div>
             </form>
         </div>
@@ -526,17 +443,6 @@ document.getElementById('categoryFilter').addEventListener('change', function(e)
     });
 });
 
-function editDripBox(id) {
-    window.location.href = 'edit-dripbox.php?id=' + id;
-}
-
-function deleteDripBox(id) {
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.innerHTML = '<input type="hidden" name="delete_box" value="' + id + '">';
-    document.body.appendChild(form);
-    form.submit();
-}
 </script>
 
 <style>

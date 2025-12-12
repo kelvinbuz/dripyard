@@ -71,6 +71,12 @@ $adminStats = [
                 </a>
             </li>
             <li class="admin-nav-item">
+                <a href="<?php echo $basePath; ?>/public/admin/dripboxes.php" class="admin-nav-link <?php echo basename($_SERVER['PHP_SELF']) === 'dripboxes.php' || basename($_SERVER['PHP_SELF']) === 'new-dripbox.php' || basename($_SERVER['PHP_SELF']) === 'edit-dripbox.php' ? 'active' : ''; ?>">
+                    <i class="bi bi-box"></i>
+                    DripBoxes
+                </a>
+            </li>
+            <li class="admin-nav-item">
                 <a href="<?php echo $basePath; ?>/public/admin/categories.php" class="admin-nav-link <?php echo basename($_SERVER['PHP_SELF']) === 'categories.php' ? 'active' : ''; ?>">
                     <i class="bi bi-tags"></i>
                     Categories

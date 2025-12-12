@@ -64,9 +64,29 @@ CREATE TABLE `orders` (
 CREATE TABLE `order_items` (
   `id` int(10) UNSIGNED NOT NULL,
   `order_id` int(10) UNSIGNED NOT NULL,
-  `product_id` int(10) UNSIGNED NOT NULL,
+  `item_type` varchar(10) NOT NULL DEFAULT 'product',
+  `product_id` int(10) UNSIGNED DEFAULT NULL,
+  `box_id` int(10) UNSIGNED DEFAULT NULL,
   `quantity` int(10) UNSIGNED NOT NULL,
-  `price` decimal(10,2) NOT NULL
+  `price` decimal(10,2) NOT NULL,
+  `name` varchar(255) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `cart_items`
+--
+
+CREATE TABLE `cart_items` (
+  `id` int(10) UNSIGNED NOT NULL,
+  `user_id` int(10) UNSIGNED NOT NULL,
+  `item_type` varchar(10) NOT NULL DEFAULT 'product',
+  `product_id` int(10) UNSIGNED DEFAULT NULL,
+  `box_id` int(10) UNSIGNED DEFAULT NULL,
+  `quantity` int(10) UNSIGNED NOT NULL DEFAULT 1,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -90,9 +110,29 @@ CREATE TABLE `products` (
 -- Dumping data for table `products`
 --
 
-INSERT INTO `products` (`id`, `name`, `category_id`, `price`, `description`, `image`, `stock`, `created_at`) VALUES
-(4, 'Top', 1, 30.00, '', '1764119724_494E5429-A094-499A-9F16-BCCD77B4618C.JPG', 10, '2025-11-26 01:15:24'),
-(5, 'FTop', 1, 30.00, '', '1764285075_602A4576-932F-49D5-9A98-5AF5925CAAF6.JPG', 10, '2025-11-27 23:10:50');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `dripbox_products`
+--
+
+CREATE TABLE `dripbox_products` (
+  `box_id` int(10) UNSIGNED NOT NULL,
+  `product_id` int(10) UNSIGNED NOT NULL,
+  `quantity` int(10) UNSIGNED NOT NULL DEFAULT 1,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`box_id`,`product_id`),
+  KEY `fk_dripbox_products_product` (`product_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `dripbox_products`
+--
+
+INSERT INTO `dripbox_products` (`box_id`, `product_id`, `quantity`, `created_at`) VALUES
+(2, 4, 1, '2025-11-26 01:53:14'),
+(2, 5, 1, '2025-11-26 01:53:14');
 
 -- --------------------------------------------------------
 
@@ -154,6 +194,15 @@ ALTER TABLE `categories`
   ADD UNIQUE KEY `uk_categories_name` (`name`);
 
 --
+-- Indexes for table `cart_items`
+--
+ALTER TABLE `cart_items`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uk_cart_user_item` (`user_id`,`item_type`,`product_id`,`box_id`),
+  ADD KEY `fk_cart_product` (`product_id`),
+  ADD KEY `fk_cart_box` (`box_id`);
+
+--
 -- Indexes for table `orders`
 --
 ALTER TABLE `orders`
@@ -166,7 +215,8 @@ ALTER TABLE `orders`
 ALTER TABLE `order_items`
   ADD PRIMARY KEY (`id`),
   ADD KEY `fk_items_order` (`order_id`),
-  ADD KEY `fk_items_product` (`product_id`);
+  ADD KEY `fk_items_product` (`product_id`),
+  ADD KEY `fk_items_box` (`box_id`);
 
 --
 -- Indexes for table `products`
@@ -174,6 +224,13 @@ ALTER TABLE `order_items`
 ALTER TABLE `products`
   ADD PRIMARY KEY (`id`),
   ADD KEY `fk_products_category` (`category_id`);
+
+--
+-- Indexes for table `dripbox_products`
+--
+ALTER TABLE `dripbox_products`
+  ADD PRIMARY KEY (`box_id`,`product_id`),
+  ADD KEY `fk_dripbox_products_product` (`product_id`);
 
 --
 -- Indexes for table `sunnydripboxes`
@@ -197,6 +254,12 @@ ALTER TABLE `users`
 --
 ALTER TABLE `categories`
   MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+
+--
+-- AUTO_INCREMENT for table `cart_items`
+--
+ALTER TABLE `cart_items`
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `orders`
@@ -243,7 +306,23 @@ ALTER TABLE `orders`
 --
 ALTER TABLE `order_items`
   ADD CONSTRAINT `fk_items_order` FOREIGN KEY (`order_id`) REFERENCES `orders` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  ADD CONSTRAINT `fk_items_product` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON UPDATE CASCADE;
+  ADD CONSTRAINT `fk_items_product` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON UPDATE CASCADE,
+  ADD CONSTRAINT `fk_items_box` FOREIGN KEY (`box_id`) REFERENCES `sunnydripboxes` (`id`) ON UPDATE CASCADE;
+
+--
+-- Constraints for table `cart_items`
+--
+ALTER TABLE `cart_items`
+  ADD CONSTRAINT `fk_cart_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `fk_cart_product` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `fk_cart_box` FOREIGN KEY (`box_id`) REFERENCES `sunnydripboxes` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
+-- Constraints for table `dripbox_products`
+--
+ALTER TABLE `dripbox_products`
+  ADD CONSTRAINT `fk_dripbox_products_box` FOREIGN KEY (`box_id`) REFERENCES `sunnydripboxes` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `fk_dripbox_products_product` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON UPDATE CASCADE;
 
 --
 -- Constraints for table `products`

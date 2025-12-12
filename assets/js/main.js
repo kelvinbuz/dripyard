@@ -6,13 +6,39 @@
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams(data),
-    }).then(function (res) { return res.json(); });
+    }).then(function (res) {
+      return res.text().then(function (text) {
+        try {
+          return JSON.parse(text);
+        } catch (e) {
+          var err = new Error('Invalid JSON response');
+          err.responseText = text;
+          err.status = res.status;
+          throw err;
+        }
+      });
+    });
   }
 
   function updateCartCount(count) {
     var el = document.getElementById('cart-count');
     if (el) {
       el.textContent = count;
+    }
+  }
+
+  function showToast(message, type) {
+    try {
+      var toast = document.createElement('div');
+      toast.className = 'alert alert-' + (type || 'info') + ' alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-3';
+      toast.style.zIndex = '9999';
+      toast.innerHTML = '<i class="bi bi-' + ((type || 'info') === 'success' ? 'check-circle' : 'info-circle') + ' me-2"></i>'
+        + (message || '')
+        + '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
+      document.body.appendChild(toast);
+      setTimeout(function () { toast.remove(); }, 3000);
+    } catch (e) {
+      // ignore
     }
   }
 
@@ -35,13 +61,42 @@
       .then(function (data) {
         if (data.success) {
           updateCartCount(data.count || 0);
-        }
-        if (data.message) {
-          console.info('Cart update:', data.message);
+          showToast(data.message || 'Added to cart.', 'success');
+        } else if (data.message) {
+          showToast(data.message, 'danger');
         }
       })
       .catch(function (err) {
         console.error('Could not update cart.', err);
+        showToast('Could not add to cart. Please refresh and try again.', 'danger');
+      });
+  });
+
+  // Handle Add DripBox to Cart buttons (data-box-id)
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('.add-box-to-cart-btn');
+    if (!btn) return;
+
+    e.preventDefault();
+
+    var boxId = btn.getAttribute('data-box-id');
+    var basePath = (window.DRIPYARD && window.DRIPYARD.basePath) || '..';
+
+    postForm(basePath + '/backend/cart-controller.php', {
+      action: 'add_box',
+      box_id: boxId,
+    })
+      .then(function (data) {
+        if (data.success) {
+          updateCartCount(data.count || 0);
+          showToast(data.message || 'DripBox added to cart.', 'success');
+        } else if (data.message) {
+          showToast(data.message, 'danger');
+        }
+      })
+      .catch(function (err) {
+        console.error('Could not add DripBox to cart.', err);
+        showToast('Could not add DripBox to cart. Please refresh and try again.', 'danger');
       });
   });
 

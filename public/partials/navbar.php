@@ -340,9 +340,18 @@
         <a class="navbar-brand d-flex align-items-center" href="<?php echo $basePath; ?>/public/index.php">
             DripYard
         </a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#dripyardNav" aria-controls="dripyardNav" aria-expanded="false" aria-label="Toggle navigation">
-            <span class="navbar-toggler-icon"></span>
-        </button>
+
+        <!-- Mobile cart icon + menu button group -->
+        <div class="d-flex align-items-center ms-auto gap-2 d-lg-none">
+            <a class="nav-link nav-icon-link position-relative" href="<?php echo $basePath; ?>/public/cart.php" aria-label="Shopping Cart">
+                <i class="bi bi-bag"></i>
+                <span class="badge rounded-pill badge-cart-count" id="cart-count-mobile"><?php echo (int)$cartCount; ?></span>
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#dripyardNav" aria-controls="dripyardNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+        </div>
+
         <div class="collapse navbar-collapse" id="dripyardNav">
             <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                 <li class="nav-item">
@@ -368,7 +377,7 @@
             </div>
             
             <ul class="navbar-nav ms-auto mb-2 mb-lg-0 align-items-lg-center">
-                <li class="nav-item me-2">
+                <li class="nav-item me-2 d-none d-lg-block">
                     <a class="nav-link nav-icon-link position-relative" href="<?php echo $basePath; ?>/public/cart.php" aria-label="Shopping Cart">
                         <i class="bi bi-bag"></i>
                         <span class="badge rounded-pill badge-cart-count" id="cart-count"><?php echo (int)$cartCount; ?></span>

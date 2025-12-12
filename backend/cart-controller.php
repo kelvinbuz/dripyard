@@ -20,6 +20,14 @@ function findProduct(PDO $pdo, int $id): ?array
     return $product ?: null;
 }
 
+function findDripBox(PDO $pdo, int $id): ?array
+{
+    $stmt = $pdo->prepare('SELECT id, name, price, image FROM sunnydripboxes WHERE id = ? LIMIT 1');
+    $stmt->execute([$id]);
+    $box = $stmt->fetch();
+    return $box ?: null;
+}
+
 $cart = getCart();
 
 if ($method === 'GET' && $action === 'summary') {
@@ -53,15 +61,18 @@ try {
                 break;
             }
 
-            $currentQty = isset($cart[$productId]) ? (int)$cart[$productId]['quantity'] : 0;
+            $key = 'product:' . $productId;
+            $currentQty = isset($cart[$key]) ? (int)$cart[$key]['quantity'] : 0;
             $newQty = $currentQty + $quantity;
             if ($newQty > (int)$product['stock']) {
                 echo json_encode(['success' => false, 'message' => 'Not enough stock for this product.']);
                 break;
             }
 
-            $cart[$productId] = [
+            $cart[$key] = [
+                'item_type' => 'product',
                 'product_id' => $productId,
+                'box_id' => 0,
                 'quantity' => $newQty,
             ];
             saveCart($cart);
@@ -73,28 +84,71 @@ try {
             ]);
             break;
 
-        case 'update':
-            $productId = isset($_POST['product_id']) ? (int)$_POST['product_id'] : 0;
-            $quantity = max(0, (int)($_POST['quantity'] ?? 0));
+        case 'add_box':
+            $boxId = isset($_POST['box_id']) ? (int)$_POST['box_id'] : 0;
+            if ($boxId <= 0) {
+                echo json_encode(['success' => false, 'message' => 'Invalid DripBox.']);
+                break;
+            }
 
-            if (!isset($cart[$productId])) {
+            $box = findDripBox($pdo, $boxId);
+            if (!$box) {
+                echo json_encode(['success' => false, 'message' => 'DripBox not found.']);
+                break;
+            }
+
+            // Add DripBox as a single cart item (do not expand into its products)
+            $key = 'box:' . $boxId;
+            $currentQty = isset($cart[$key]) ? (int)$cart[$key]['quantity'] : 0;
+            $cart[$key] = [
+                'item_type' => 'box',
+                'product_id' => 0,
+                'box_id' => $boxId,
+                'quantity' => $currentQty + 1,
+            ];
+            saveCart($cart);
+
+            echo json_encode([
+                'success' => true,
+                'message' => 'DripBox added to cart.',
+                'count' => getCartItemCount(),
+            ]);
+            break;
+
+        case 'update':
+            $itemType = (string)($_POST['item_type'] ?? 'product');
+            $quantity = max(0, (int)($_POST['quantity'] ?? 0));
+            $productId = isset($_POST['product_id']) ? (int)$_POST['product_id'] : 0;
+            $boxId = isset($_POST['box_id']) ? (int)$_POST['box_id'] : 0;
+            $key = $itemType === 'box' ? ('box:' . $boxId) : ('product:' . $productId);
+
+            if (!isset($cart[$key])) {
                 echo json_encode(['success' => false, 'message' => 'Item not found in cart.']);
                 break;
             }
 
             if ($quantity === 0) {
-                unset($cart[$productId]);
+                unset($cart[$key]);
             } else {
-                $product = findProduct($pdo, $productId);
-                if (!$product) {
-                    echo json_encode(['success' => false, 'message' => 'Product not found.']);
-                    break;
+                if ($itemType === 'box') {
+                    $box = findDripBox($pdo, $boxId);
+                    if (!$box) {
+                        echo json_encode(['success' => false, 'message' => 'DripBox not found.']);
+                        break;
+                    }
+                    $cart[$key]['quantity'] = $quantity;
+                } else {
+                    $product = findProduct($pdo, $productId);
+                    if (!$product) {
+                        echo json_encode(['success' => false, 'message' => 'Product not found.']);
+                        break;
+                    }
+                    if ($quantity > (int)$product['stock']) {
+                        echo json_encode(['success' => false, 'message' => 'Not enough stock for this product.']);
+                        break;
+                    }
+                    $cart[$key]['quantity'] = $quantity;
                 }
-                if ($quantity > (int)$product['stock']) {
-                    echo json_encode(['success' => false, 'message' => 'Not enough stock for this product.']);
-                    break;
-                }
-                $cart[$productId]['quantity'] = $quantity;
             }
 
             saveCart($cart);
@@ -106,9 +160,13 @@ try {
             break;
 
         case 'remove':
+            $itemType = (string)($_POST['item_type'] ?? 'product');
             $productId = isset($_POST['product_id']) ? (int)$_POST['product_id'] : 0;
-            if (isset($cart[$productId])) {
-                unset($cart[$productId]);
+            $boxId = isset($_POST['box_id']) ? (int)$_POST['box_id'] : 0;
+            $key = $itemType === 'box' ? ('box:' . $boxId) : ('product:' . $productId);
+
+            if (isset($cart[$key])) {
+                unset($cart[$key]);
                 saveCart($cart);
             }
             echo json_encode([
